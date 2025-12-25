@@ -245,7 +245,7 @@ export default function ChatWindow({ currentUser, selectedUser, onMenuClick }: C
             {messages.map((message, index) => {
               const isOwn = message.senderId === currentUser.uid;
               const showDate = index === 0 || 
-                format(filteredMessages[index - 1].timestamp, 'dd/MM/yyyy') !== format(message.timestamp, 'dd/MM/yyyy');
+                format(messages[index - 1].timestamp, 'dd/MM/yyyy') !== format(message.timestamp, 'dd/MM/yyyy');
 
               return (
                 <div key={message.id}>
@@ -275,8 +275,7 @@ export default function ChatWindow({ currentUser, selectedUser, onMenuClick }: C
               </div>
             )}
           </>
-        );
-        })()}
+        )}
         <div ref={messagesEndRef} />
       </div>
 
