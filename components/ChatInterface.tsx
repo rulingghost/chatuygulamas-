@@ -25,42 +25,26 @@ export default function ChatInterface({ user }: ChatInterfaceProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    // Listen to messages to get unique chat partners
-    const messagesQuery = query(
+    const chatPartnerIds = new Set<string>();
+
+    // Listen to sent messages
+    const messagesQuery1 = query(
       collection(db, 'messages'),
       where('senderId', '==', user.uid)
     );
 
+    // Listen to received messages
     const messagesQuery2 = query(
       collection(db, 'messages'),
       where('receiverId', '==', user.uid)
     );
-
-    const chatPartnerIds = new Set<string>();
-    const userDataMap = new Map<string, ChatUser>();
-
-    const unsubscribe1 = onSnapshot(messagesQuery, (snapshot) => {
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        chatPartnerIds.add(data.receiverId);
-      });
-      updateUsersList();
-    });
-
-    const unsubscribe2 = onSnapshot(messagesQuery2, (snapshot) => {
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        chatPartnerIds.add(data.senderId);
-      });
-      updateUsersList();
-    });
 
     const updateUsersList = async () => {
       const uniqueIds = Array.from(chatPartnerIds);
       const usersList: ChatUser[] = [];
 
       for (const userId of uniqueIds) {
-        if (!userDataMap.has(userId)) {
+        try {
           const userQuery = query(
             collection(db, 'users'),
             where('uid', '==', userId)
@@ -69,23 +53,41 @@ export default function ChatInterface({ user }: ChatInterfaceProps) {
           
           userSnapshot.forEach((doc) => {
             const data = doc.data();
-            const userData: ChatUser = {
+            usersList.push({
               uid: doc.id,
               email: data.email,
               displayName: data.displayName,
               photoURL: data.photoURL,
               lastSeen: data.lastSeen?.toDate() || new Date(),
-            };
-            userDataMap.set(userId, userData);
-            usersList.push(userData);
+            });
           });
-        } else {
-          usersList.push(userDataMap.get(userId)!);
+        } catch (error) {
+          console.error('Error fetching user:', error);
         }
       }
 
       setUsers(usersList);
     };
+
+    const unsubscribe1 = onSnapshot(messagesQuery1, (snapshot) => {
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.receiverId) {
+          chatPartnerIds.add(data.receiverId);
+        }
+      });
+      updateUsersList();
+    });
+
+    const unsubscribe2 = onSnapshot(messagesQuery2, (snapshot) => {
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.senderId) {
+          chatPartnerIds.add(data.senderId);
+        }
+      });
+      updateUsersList();
+    });
 
     return () => {
       unsubscribe1();
