@@ -22,7 +22,6 @@ export interface ChatUser {
 export default function ChatInterface({ user }: ChatInterfaceProps) {
   const [users, setUsers] = useState<ChatUser[]>([]);
   const [selectedUser, setSelectedUser] = useState<ChatUser | null>(null);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const chatPartnerIds = new Set<string>();
@@ -96,16 +95,13 @@ export default function ChatInterface({ user }: ChatInterfaceProps) {
   }, [user.uid]);
 
   return (
-    <div className="h-screen flex overflow-hidden">
-      {/* Sidebar */}
+    <div className="h-screen flex overflow-hidden bg-whatsapp-dark">
+      {/* Sidebar/Chat List - Show when no user selected on mobile */}
       <div className={`
-        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
-        md:translate-x-0
-        fixed md:relative
-        z-30 md:z-0
+        ${selectedUser ? 'hidden md:block' : 'block'}
         w-full md:w-96
         h-full
-        transition-transform duration-300
+        bg-whatsapp-dark
       `}>
         <Sidebar
           currentUser={user}
@@ -113,27 +109,35 @@ export default function ChatInterface({ user }: ChatInterfaceProps) {
           selectedUser={selectedUser}
           onSelectUser={(user) => {
             setSelectedUser(user);
-            setIsMobileMenuOpen(false);
           }}
-          onClose={() => setIsMobileMenuOpen(false)}
+          onClose={() => setSelectedUser(null)}
         />
       </div>
 
-      {/* Chat Window */}
-      <div className="flex-1 flex flex-col">
-        <ChatWindow
-          currentUser={user}
-          selectedUser={selectedUser}
-          onMenuClick={() => setIsMobileMenuOpen(true)}
-        />
-      </div>
-
-      {/* Mobile overlay */}
-      {isMobileMenuOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-20 md:hidden"
-          onClick={() => setIsMobileMenuOpen(false)}
-        />
+      {/* Chat Window - Show when user selected */}
+      {selectedUser && (
+        <div className="flex-1 w-full h-full bg-whatsapp-dark">
+          <ChatWindow
+            currentUser={user}
+            selectedUser={selectedUser}
+            onMenuClick={() => setSelectedUser(null)}
+          />
+        </div>
+      )}
+      
+      {/* Empty state on desktop when no chat selected */}
+      {!selectedUser && (
+        <div className="hidden md:flex flex-1 items-center justify-center bg-whatsapp-darker">
+          <div className="text-center">
+            <div className="w-64 h-64 mx-auto mb-8 opacity-10">
+              <svg viewBox="0 0 303 172" fill="currentColor" className="text-gray-600">
+                <path d="M151.5 0C67.9 0 0 67.9 0 151.5S67.9 303 151.5 303 303 235.1 303 151.5 235.1 0 151.5 0zm0 276.9c-69.3 0-125.4-56.1-125.4-125.4S82.2 26.1 151.5 26.1s125.4 56.1 125.4 125.4-56.1 125.4-125.4 125.4z"/>
+              </svg>
+            </div>
+            <h2 className="text-3xl font-light text-gray-400 mb-4">Chat App</h2>
+            <p className="text-gray-500">Bir sohbet seçin ve mesajlaşmaya başlayın</p>
+          </div>
+        </div>
       )}
     </div>
   );
