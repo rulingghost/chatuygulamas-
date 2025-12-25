@@ -15,11 +15,15 @@ import {
   setDoc,
   or,
   and,
+  updateDoc,
+  writeBatch,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Send, Menu, Circle, Smile, Paperclip } from 'lucide-react';
+import { Send, Menu, Circle, Smile, Paperclip, Search, MoreVertical } from 'lucide-react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import Message from './Message';
+import TypingIndicator from './TypingIndicator';
 
 interface ChatWindowProps {
   currentUser: User;
@@ -27,18 +31,22 @@ interface ChatWindowProps {
   onMenuClick: () => void;
 }
 
-interface Message {
+interface MessageType {
   id: string;
   text: string;
   senderId: string;
   receiverId: string;
   timestamp: Date;
+  isRead?: boolean;
 }
 
 export default function ChatWindow({ currentUser, selectedUser, onMenuClick }: ChatWindowProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<MessageType[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [otherUserTyping, setOtherUserTyping] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Update user's last seen on mount and periodically
@@ -84,7 +92,7 @@ export default function ChatWindow({ currentUser, selectedUser, onMenuClick }: C
     );
 
     const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
-      const messagesList: Message[] = [];
+      const messagesList: MessageType[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
         messagesList.push({
@@ -93,6 +101,7 @@ export default function ChatWindow({ currentUser, selectedUser, onMenuClick }: C
           senderId: data.senderId,
           receiverId: data.receiverId,
           timestamp: data.timestamp?.toDate() || new Date(),
+          isRead: data.isRead || false,
         });
       });
       setMessages(messagesList);
@@ -155,37 +164,66 @@ export default function ChatWindow({ currentUser, selectedUser, onMenuClick }: C
   return (
     <div className="h-full bg-whatsapp-darker flex flex-col">
       {/* Chat Header */}
-      <div className="bg-whatsapp-light p-4 border-b border-whatsapp-border flex items-center gap-3">
-        <button
-          onClick={onMenuClick}
-          className="md:hidden p-2 hover:bg-whatsapp-lighter rounded-full transition-colors"
-        >
-          <Menu className="w-5 h-5 text-gray-400" />
-        </button>
-        
-        <div className="relative">
-          <img
-            src={selectedUser.photoURL || '/default-avatar.png'}
-            alt={selectedUser.displayName}
-            className="w-10 h-10 rounded-full"
-          />
-          {isOnline(selectedUser) && (
-            <Circle className="absolute bottom-0 right-0 w-3 h-3 text-green-500 fill-green-500 bg-whatsapp-light rounded-full" />
-          )}
+      <div className="bg-whatsapp-light border-b border-whatsapp-border">
+        <div className="p-4 flex items-center gap-3">
+          <button
+            onClick={onMenuClick}
+            className="md:hidden p-2 hover:bg-whatsapp-lighter rounded-full transition-colors"
+          >
+            <Menu className="w-5 h-5 text-gray-400" />
+          </button>
+          
+          <div className="relative">
+            <img
+              src={selectedUser.photoURL || '/default-avatar.png'}
+              alt={selectedUser.displayName}
+              className="w-10 h-10 rounded-full"
+            />
+            {isOnline(selectedUser) && (
+              <Circle className="absolute bottom-0 right-0 w-3 h-3 text-green-500 fill-green-500 bg-whatsapp-light rounded-full" />
+            )}
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <h3 className="text-white font-medium truncate">
+              {selectedUser.displayName}
+            </h3>
+            <p className="text-sm text-gray-400">
+              {otherUserTyping ? (
+                <span className="text-whatsapp-primary">yazıyor...</span>
+              ) : isOnline(selectedUser) ? (
+                <span className="text-green-500">Çevrimiçi</span>
+              ) : (
+                `Son görülme: ${format(selectedUser.lastSeen, 'HH:mm', { locale: tr })}`
+              )}
+            </p>
+          </div>
+
+          <button
+            onClick={() => setShowSearch(!showSearch)}
+            className="p-2 hover:bg-whatsapp-lighter rounded-full transition-colors"
+            title="Mesajlarda Ara"
+          >
+            <Search className={`w-5 h-5 ${showSearch ? 'text-whatsapp-primary' : 'text-gray-400'}`} />
+          </button>
         </div>
 
-        <div className="flex-1 min-w-0">
-          <h3 className="text-white font-medium truncate">
-            {selectedUser.displayName}
-          </h3>
-          <p className="text-sm text-gray-400">
-            {isOnline(selectedUser) ? (
-              <span className="text-green-500">Çevrimiçi</span>
-            ) : (
-              `Son görülme: ${format(selectedUser.lastSeen, 'HH:mm', { locale: tr })}`
-            )}
-          </p>
-        </div>
+        {/* Search Input */}
+        {showSearch && (
+          <div className="px-4 pb-4 animate-slide-up">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Mesajlarda ara..."
+                className="w-full bg-whatsapp-darker text-white pl-10 pr-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-whatsapp-primary/50 placeholder-gray-500 text-sm"
+                autoFocus
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Messages */}
@@ -203,45 +241,42 @@ export default function ChatWindow({ currentUser, selectedUser, onMenuClick }: C
             </div>
           </div>
         ) : (
-          messages.map((message, index) => {
-            const isOwn = message.senderId === currentUser.uid;
-            const showDate = index === 0 || 
-              format(messages[index - 1].timestamp, 'dd/MM/yyyy') !== format(message.timestamp, 'dd/MM/yyyy');
+          <>
+            {messages.map((message, index) => {
+              const isOwn = message.senderId === currentUser.uid;
+              const showDate = index === 0 || 
+                format(filteredMessages[index - 1].timestamp, 'dd/MM/yyyy') !== format(message.timestamp, 'dd/MM/yyyy');
 
-            return (
-              <div key={message.id}>
-                {showDate && (
-                  <div className="flex justify-center my-4">
-                    <span className="bg-whatsapp-light text-gray-400 text-xs px-3 py-1 rounded-lg">
-                      {format(message.timestamp, 'dd MMMM yyyy', { locale: tr })}
-                    </span>
-                  </div>
-                )}
-                <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} message-enter`}>
-                  <div
-                    className={`max-w-[70%] md:max-w-md px-4 py-2 rounded-lg shadow-lg ${
-                      isOwn
-                        ? 'bg-whatsapp-outgoing text-white rounded-br-none'
-                        : 'bg-whatsapp-incoming text-white rounded-bl-none'
-                    }`}
-                  >
-                    <p className="break-words whitespace-pre-wrap">{message.text}</p>
-                    <div className="flex items-center justify-end gap-1 mt-1">
-                      <span className="text-xs text-gray-300">
-                        {format(message.timestamp, 'HH:mm', { locale: tr })}
+              return (
+                <div key={message.id}>
+                  {showDate && (
+                    <div className="flex justify-center my-4">
+                      <span className="bg-whatsapp-light text-gray-400 text-xs px-3 py-1 rounded-lg">
+                        {format(message.timestamp, 'dd MMMM yyyy', { locale: tr })}
                       </span>
-                      {isOwn && (
-                        <svg className="w-4 h-4 text-blue-400" viewBox="0 0 16 15" fill="currentColor">
-                          <path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.266c.143.14.361.125.484-.033l6.272-8.048a.366.366 0 0 0-.064-.512zm-4.1 0l-.478-.372a.365.365 0 0 0-.51.063L4.566 9.879a.32.32 0 0 1-.484.033L1.891 7.769a.366.366 0 0 0-.515.006l-.423.433a.364.364 0 0 0 .006.514l3.258 3.185c.143.14.361.125.484-.033l6.272-8.048a.365.365 0 0 0-.063-.51z"/>
-                        </svg>
-                      )}
                     </div>
-                  </div>
+                  )}
+                  <Message
+                    id={message.id}
+                    text={message.text}
+                    timestamp={message.timestamp}
+                    isOwn={isOwn}
+                    isRead={message.isRead}
+                    currentUserId={currentUser.uid}
+                  />
                 </div>
+              );
+            })}
+            
+            {/* Typing Indicator */}
+            {!searchQuery && otherUserTyping && (
+              <div className="flex justify-start">
+                <TypingIndicator />
               </div>
-            );
-          })
-        )}
+            )}
+          </>
+        );
+        })()}
         <div ref={messagesEndRef} />
       </div>
 
