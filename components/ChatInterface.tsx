@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
-import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import Sidebar from './Sidebar';
 import ChatWindow from './ChatWindow';
@@ -25,30 +25,72 @@ export default function ChatInterface({ user }: ChatInterfaceProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    // Listen to all users
-    const usersQuery = query(
-      collection(db, 'users'),
-      orderBy('lastSeen', 'desc')
+    // Listen to messages to get unique chat partners
+    const messagesQuery = query(
+      collection(db, 'messages'),
+      where('senderId', '==', user.uid)
     );
 
-    const unsubscribe = onSnapshot(usersQuery, (snapshot) => {
-      const usersList: ChatUser[] = [];
+    const messagesQuery2 = query(
+      collection(db, 'messages'),
+      where('receiverId', '==', user.uid)
+    );
+
+    const chatPartnerIds = new Set<string>();
+    const userDataMap = new Map<string, ChatUser>();
+
+    const unsubscribe1 = onSnapshot(messagesQuery, (snapshot) => {
       snapshot.forEach((doc) => {
         const data = doc.data();
-        if (doc.id !== user.uid) {
-          usersList.push({
-            uid: doc.id,
-            email: data.email,
-            displayName: data.displayName,
-            photoURL: data.photoURL,
-            lastSeen: data.lastSeen?.toDate() || new Date(),
-          });
-        }
+        chatPartnerIds.add(data.receiverId);
       });
-      setUsers(usersList);
+      updateUsersList();
     });
 
-    return () => unsubscribe();
+    const unsubscribe2 = onSnapshot(messagesQuery2, (snapshot) => {
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        chatPartnerIds.add(data.senderId);
+      });
+      updateUsersList();
+    });
+
+    const updateUsersList = async () => {
+      const uniqueIds = Array.from(chatPartnerIds);
+      const usersList: ChatUser[] = [];
+
+      for (const userId of uniqueIds) {
+        if (!userDataMap.has(userId)) {
+          const userQuery = query(
+            collection(db, 'users'),
+            where('uid', '==', userId)
+          );
+          const userSnapshot = await getDocs(userQuery);
+          
+          userSnapshot.forEach((doc) => {
+            const data = doc.data();
+            const userData: ChatUser = {
+              uid: doc.id,
+              email: data.email,
+              displayName: data.displayName,
+              photoURL: data.photoURL,
+              lastSeen: data.lastSeen?.toDate() || new Date(),
+            };
+            userDataMap.set(userId, userData);
+            usersList.push(userData);
+          });
+        } else {
+          usersList.push(userDataMap.get(userId)!);
+        }
+      }
+
+      setUsers(usersList);
+    };
+
+    return () => {
+      unsubscribe1();
+      unsubscribe2();
+    };
   }, [user.uid]);
 
   return (
