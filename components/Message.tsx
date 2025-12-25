@@ -40,15 +40,15 @@ export default function Message({ id, text, timestamp, isOwn, isRead, currentUse
       onMouseEnter={() => setShowDelete(true)}
       onMouseLeave={() => setShowDelete(false)}
     >
-      <div className="relative">
+      <div className="relative max-w-[85%] md:max-w-[75%]">
         <div
-          className={`max-w-[70%] md:max-w-md px-4 py-2 rounded-lg shadow-lg transition-all ${
+          className={`px-4 py-2 rounded-lg shadow-lg transition-all ${
             isOwn
               ? 'bg-whatsapp-outgoing text-white rounded-br-none'
               : 'bg-whatsapp-incoming text-white rounded-bl-none'
           } ${deleting ? 'opacity-50' : ''}`}
         >
-          <p className="break-words whitespace-pre-wrap">{text}</p>
+          <p className="break-words whitespace-pre-wrap text-[15px] leading-relaxed">{text}</p>
           <div className="flex items-center justify-end gap-1 mt-1">
             <span className="text-xs text-gray-300">
               {format(timestamp, 'HH:mm', { locale: tr })}
