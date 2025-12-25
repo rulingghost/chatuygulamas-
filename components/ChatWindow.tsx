@@ -302,6 +302,12 @@ export default function ChatWindow({ currentUser, selectedUser, onMenuClick }: C
             type="text"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage(e as any);
+              }
+            }}
             placeholder="Bir mesaj yazın..."
             className="flex-1 bg-whatsapp-darker text-white px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-whatsapp-primary/50 placeholder-gray-500"
           />
