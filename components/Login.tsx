@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, sendEmailVerification } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { MessageCircle, Mail, Lock, User, Sparkles, LogIn, UserPlus } from 'lucide-react';
@@ -33,7 +33,16 @@ export default function Login() {
         photoURL: `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=00a884&color=fff&size=200`,
         lastSeen: serverTimestamp(),
         createdAt: serverTimestamp(),
+        emailVerified: false,
       });
+
+      // Send email verification
+      await sendEmailVerification(userCredential.user);
+      
+      // Sign out until email is verified
+      await auth.signOut();
+      
+      alert('✅ Kayıt başarılı! Lütfen email adresinizi kontrol edin ve doğrulama linkine tıklayın. Doğruladıktan sonra giriş yapabilirsiniz.');
     } catch (error: any) {
       console.error('Kayıt hatası:', error);
       if (error.code === 'auth/email-already-in-use') {
@@ -57,7 +66,14 @@ export default function Login() {
 
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      
+      // Check if email is verified
+      if (!userCredential.user.emailVerified) {
+        await auth.signOut();
+        alert('⚠️ Lütfen önce email adresinizi doğrulayın! Email kutunuzu kontrol edin ve doğrulama linkine tıklayın.');
+        return;
+      }
     } catch (error: any) {
       console.error('Giriş hatası:', error);
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
